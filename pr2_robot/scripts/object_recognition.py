@@ -79,34 +79,34 @@ def pcl_callback(pcl_msg):
     object_cloud = cloud_filtered.extract(inliers, negative=True)
     table_cloud  = cloud_filtered.extract(inliers, negative=False)
 
-    # # Clustering
-    # white_cloud = XYZRGB_to_XYZ(object_cloud)
-    # tree = white_cloud.make_kdtree()
-    # ec = white_cloud.make_EuclideanClusterExtraction()
-    # ec.set_ClusterTolerance(0.05)
-    # ec.set_MinClusterSize(10)
-    # ec.set_MaxClusterSize(10000)
-    # ec.set_SearchMethod(tree)
-    # cluster_indices = ec.Extract()
+    # Clustering
+    white_cloud = XYZRGB_to_XYZ(object_cloud)
+    tree = white_cloud.make_kdtree()
+    ec = white_cloud.make_EuclideanClusterExtraction()
+    ec.set_ClusterTolerance(0.05)
+    ec.set_MinClusterSize(10)
+    ec.set_MaxClusterSize(10000)
+    ec.set_SearchMethod(tree)
+    cluster_indices = ec.Extract()
 
 
-    # # Cluster-Mask Point Cloud to visualize each cluster separately
-    # cluster_colour = get_color_list(len(cluster_indices))
-    # colour_cluster_point_list = []
+    # Cluster-Mask Point Cloud to visualize each cluster separately
+    cluster_colour = get_color_list(len(cluster_indices))
+    colour_cluster_point_list = []
 
-    # for j, indices in enumerate(cluster_indices):
-    #     for i in indices:
-    #         colour_cluster_point_list.append([white_cloud[i][0],
-    #                                           white_cloud[i][1],
-    #                                           white_cloud[i][2],
-    #                                           rgb_to_float(cluster_colour[j])])
-    # cluster_cloud = pcl.PointCloud_PointXYZRGB()
-    # cluster_cloud.from_list(colour_cluster_point_list)
+    for j, indices in enumerate(cluster_indices):
+        for i in indices:
+            colour_cluster_point_list.append([white_cloud[i][0],
+                                              white_cloud[i][1],
+                                              white_cloud[i][2],
+                                              rgb_to_float(cluster_colour[j])])
+    cluster_cloud = pcl.PointCloud_PointXYZRGB()
+    cluster_cloud.from_list(colour_cluster_point_list)
 
     # Publish
     pcl_objects_pub.publish(pcl_to_ros(object_cloud))
     pcl_table_pub.publish(pcl_to_ros(table_cloud))
-    # pcl_cluster_pub.publish(pcl_to_ros(cluster_cloud))
+    pcl_cluster_pub.publish(pcl_to_ros(cluster_cloud))
 
 # Exercise-3 TODOs:
 
