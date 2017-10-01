@@ -15,6 +15,7 @@ from sensor_stick.msg import DetectedObject
 from sensor_stick.pcl_helper import *
 
 import rospy
+import rospkg
 import tf
 from geometry_msgs.msg import Pose
 from std_msgs.msg import Float64
@@ -46,10 +47,13 @@ def send_to_yaml(yaml_filename, dict_list):
     with open(yaml_filename, 'w') as outfile:
         yaml.dump(data_dict, outfile, default_flow_style=False)
 
-# Callback function for your Point Cloud Subscriber
-def pcl_callback(pcl_msg):
-    cloud = ros_to_pcl(pcl_msg)
+def passthrough_cloud(cloud, axis, start, end):
+    passthrough = cloud.make_passthrough_filter()
+    passthrough.set_filter_field_name(axis)
+    passthrough.set_filter_limits(start, end)
+    return passthrough.filter()
 
+def filter_cloud(cloud):
     # Voxel Grid filter
     vox = cloud.make_voxel_grid_filter()
     LEAF_SIZE = 0.005
@@ -57,16 +61,21 @@ def pcl_callback(pcl_msg):
     cloud_filtered = vox.filter()
 
     # PassThrough filter
-    passthrough = cloud_filtered.make_passthrough_filter()
-    passthrough.set_filter_field_name('z')
-    passthrough.set_filter_limits(0.6, 0.8)
-    cloud_filtered = passthrough.filter()
+    cloud_filtered = passthrough_cloud(cloud_filtered, "z", 0.6, 0.8)
+    cloud_filtered = passthrough_cloud(cloud_filtered, "y", -0.4, 0.4)
 
     # Outlier filter
     outlier_filter = cloud_filtered.make_statistical_outlier_filter()
     outlier_filter.set_mean_k(50)
     outlier_filter.set_std_dev_mul_thresh(0.001)
     cloud_filtered = outlier_filter.filter()
+
+    return cloud_filtered
+
+# Callback function for your Point Cloud Subscriber
+def pcl_callback(pcl_msg):
+    cloud = ros_to_pcl(pcl_msg)
+    cloud_filtered = filter_cloud(cloud)
 
     # RANSAC Plane Segmentation
     seg = cloud_filtered.make_segmenter()
@@ -107,21 +116,39 @@ def pcl_callback(pcl_msg):
     pcl_table_pub.publish(pcl_to_ros(table_cloud))
     pcl_cluster_pub.publish(pcl_to_ros(cluster_cloud))
 
-# Exercise-3 TODOs:
+    # Classify the clusters (loop through each detected cluster one at a time)
+    detected_object_labels = []
+    detected_objects = []
 
-    # Classify the clusters! (loop through each detected cluster one at a time)
-
+    for idx, pts_list in enumerate(cluster_indices):
         # Grab the points for the cluster
+        pcl_cluster = pcl_to_ros(object_cloud.extract(pts_list))
 
         # Compute the associated feature vector
+        chists = compute_color_histograms(pcl_cluster, using_hsv=True)
+        nhists = compute_normal_histograms(get_normals(pcl_cluster))
+        feature = np.concatenate((chists, nhists))
 
-        # Make the prediction
+        # Make the prediction, retrieve the label for the result
+        # and add it to detected_objects_labels list
+        prediction = clf.predict(scaler.transform(feature.reshape(1,-1)))
+        label = encoder.inverse_transform(prediction)[0]
+        detected_object_labels.append(label)
 
         # Publish a label into RViz
+        label_pos = list(white_cloud[pts_list[0]])
+        label_pos[2] += .4
+        object_markers_pub.publish(make_label(label, label_pos, idx))
 
         # Add the detected object to the list of detected objects.
+        do = DetectedObject()
+        do.label = label
+        do.cloud = pcl_cluster
+        detected_objects.append(do)
 
     # Publish the list of detected objects
+    # rospy.loginfo('Detected {} objects: {}'.format(len(detected_object_labels), detected_object_labels))
+    detected_objects_pub.publish(detected_objects)
 
     # Suggested location for where to invoke your pr2_mover() function within pcl_callback()
     # Could add some logic to determine whether or not your object detections are robust
@@ -181,10 +208,19 @@ if __name__ == '__main__':
     pcl_objects_pub = rospy.Publisher("/pr2/pcl_objects", PointCloud2, queue_size=1)
     pcl_table_pub   = rospy.Publisher("/pr2/pcl_table",   PointCloud2, queue_size=1)
     pcl_cluster_pub = rospy.Publisher("/pr2/pcl_cluster", PointCloud2, queue_size=1)
-    # object_markers_pub = rospy.Publisher("/object_markers", Marker, queue_size=1)
-    # detected_objects_pub = rospy.Publisher("/detexted_objects", DetectedObjectsArray, queue_size=1)
+    object_markers_pub = rospy.Publisher("/object_markers", Marker, queue_size=1)
+    detected_objects_pub = rospy.Publisher("/detexted_objects", DetectedObjectsArray, queue_size=1)
 
-    # TODO: Load Model From disk
+    # Load model
+    rospack = rospkg.RosPack()
+    package_url = rospack.get_path("pr2_robot")
+    model_url = package_url + "/models_classification/model1.sav"
+
+    model = pickle.load(open(model_url, 'rb'))
+    clf = model['classifier']
+    encoder = LabelEncoder()
+    encoder.classes_ = model['classes']
+    scaler = model['scaler']
 
     # Initialize color_list
     get_color_list.color_list = []
