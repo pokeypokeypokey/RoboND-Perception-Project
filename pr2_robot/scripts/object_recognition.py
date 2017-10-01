@@ -47,10 +47,13 @@ def send_to_yaml(yaml_filename, dict_list):
     with open(yaml_filename, 'w') as outfile:
         yaml.dump(data_dict, outfile, default_flow_style=False)
 
-# Callback function for your Point Cloud Subscriber
-def pcl_callback(pcl_msg):
-    cloud = ros_to_pcl(pcl_msg)
+def passthrough_cloud(cloud, axis, start, end):
+    passthrough = cloud.make_passthrough_filter()
+    passthrough.set_filter_field_name(axis)
+    passthrough.set_filter_limits(start, end)
+    return passthrough.filter()
 
+def filter_cloud(cloud):
     # Voxel Grid filter
     vox = cloud.make_voxel_grid_filter()
     LEAF_SIZE = 0.005
@@ -58,16 +61,30 @@ def pcl_callback(pcl_msg):
     cloud_filtered = vox.filter()
 
     # PassThrough filter
-    passthrough = cloud_filtered.make_passthrough_filter()
-    passthrough.set_filter_field_name('z')
-    passthrough.set_filter_limits(0.6, 0.8)
-    cloud_filtered = passthrough.filter()
+    cloud_filtered = passthrough_cloud(cloud_filtered, "z", 0.6, 0.8)
+    cloud_filtered = passthrough_cloud(cloud_filtered, "y", -0.4, 0.4)
+    # passthrough = cloud_filtered.make_passthrough_filter()
+    # passthrough.set_filter_field_name('z')
+    # passthrough.set_filter_limits(0.6, 0.8)
+    # cloud_filtered = passthrough.filter()
+
+    # passthrough = cloud_filtered.make_passthrough_filter()
+    # passthrough.set_filter_field_name('z')
+    # passthrough.set_filter_limits(0.6, 0.8)
+    # cloud_filtered = passthrough.filter()
 
     # Outlier filter
     outlier_filter = cloud_filtered.make_statistical_outlier_filter()
     outlier_filter.set_mean_k(50)
     outlier_filter.set_std_dev_mul_thresh(0.001)
     cloud_filtered = outlier_filter.filter()
+
+    return cloud_filtered
+
+# Callback function for your Point Cloud Subscriber
+def pcl_callback(pcl_msg):
+    cloud = ros_to_pcl(pcl_msg)
+    cloud_filtered = filter_cloud(cloud)
 
     # RANSAC Plane Segmentation
     seg = cloud_filtered.make_segmenter()
@@ -203,11 +220,11 @@ if __name__ == '__main__':
     object_markers_pub = rospy.Publisher("/object_markers", Marker, queue_size=1)
     detected_objects_pub = rospy.Publisher("/detexted_objects", DetectedObjectsArray, queue_size=1)
 
-    # Load Model From disk
+    # Load model
     rospack = rospkg.RosPack()
     package_url = rospack.get_path("pr2_robot")
     model_url = package_url + "/models_classification/model1.sav"
-    print model_url
+
     model = pickle.load(open(model_url, 'rb'))
     clf = model['classifier']
     encoder = LabelEncoder()
