@@ -63,15 +63,6 @@ def filter_cloud(cloud):
     # PassThrough filter
     cloud_filtered = passthrough_cloud(cloud_filtered, "z", 0.6, 0.8)
     cloud_filtered = passthrough_cloud(cloud_filtered, "y", -0.4, 0.4)
-    # passthrough = cloud_filtered.make_passthrough_filter()
-    # passthrough.set_filter_field_name('z')
-    # passthrough.set_filter_limits(0.6, 0.8)
-    # cloud_filtered = passthrough.filter()
-
-    # passthrough = cloud_filtered.make_passthrough_filter()
-    # passthrough.set_filter_field_name('z')
-    # passthrough.set_filter_limits(0.6, 0.8)
-    # cloud_filtered = passthrough.filter()
 
     # Outlier filter
     outlier_filter = cloud_filtered.make_statistical_outlier_filter()
