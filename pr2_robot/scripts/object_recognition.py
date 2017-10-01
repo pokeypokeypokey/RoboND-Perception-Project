@@ -15,6 +15,7 @@ from sensor_stick.msg import DetectedObject
 from sensor_stick.pcl_helper import *
 
 import rospy
+import rospkg
 import tf
 from geometry_msgs.msg import Pose
 from std_msgs.msg import Float64
@@ -184,7 +185,16 @@ if __name__ == '__main__':
     # object_markers_pub = rospy.Publisher("/object_markers", Marker, queue_size=1)
     # detected_objects_pub = rospy.Publisher("/detexted_objects", DetectedObjectsArray, queue_size=1)
 
-    # TODO: Load Model From disk
+    # Load Model From disk
+    rospack = rospkg.RosPack()
+    package_url = rospack.get_path("pr2_robot")
+    model_url = package_url + "/models_classification/model1.sav"
+    print model_url
+    model = pickle.load(open(model_url, 'rb'))
+    clf = model['classifier']
+    encoder = LabelEncoder()
+    encoder.classes_ = model['classes']
+    scaler = model['scaler']
 
     # Initialize color_list
     get_color_list.color_list = []
