@@ -59,25 +59,25 @@ def pcl_callback(pcl_msg):
     # PassThrough filter
     passthrough = cloud_filtered.make_passthrough_filter()
     passthrough.set_filter_field_name('z')
-    passthrough.set_filter_limits(0.605, 0.8)
+    passthrough.set_filter_limits(0.6, 0.8)
     cloud_filtered = passthrough.filter()
 
     # Outlier filter
     outlier_filter = cloud_filtered.make_statistical_outlier_filter()
     outlier_filter.set_mean_k(50)
-    outlier_filter.set_std_dev_mul_thresh(0.005)
+    outlier_filter.set_std_dev_mul_thresh(0.001)
     cloud_filtered = outlier_filter.filter()
 
-    # # RANSAC Plane Segmentation
-    # seg = cloud_filtered.make_segmenter()
-    # seg.set_model_type(pcl.SACMODEL_PLANE)
-    # seg.set_method_type(pcl.SAC_RANSAC) 
-    # seg.set_distance_threshold(0.01)
-    # inliers, _ = seg.segment()
+    # RANSAC Plane Segmentation
+    seg = cloud_filtered.make_segmenter()
+    seg.set_model_type(pcl.SACMODEL_PLANE)
+    seg.set_method_type(pcl.SAC_RANSAC) 
+    seg.set_distance_threshold(0.01)
+    inliers, _ = seg.segment()
 
     # # Extract inliers and outliers
-    # object_cloud = cloud_filtered.extract(inliers, negative=True)
-    # table_cloud  = cloud_filtered.extract(inliers, negative=False)
+    object_cloud = cloud_filtered.extract(inliers, negative=True)
+    table_cloud  = cloud_filtered.extract(inliers, negative=False)
 
     # # Clustering
     # white_cloud = XYZRGB_to_XYZ(object_cloud)
@@ -104,9 +104,8 @@ def pcl_callback(pcl_msg):
     # cluster_cloud.from_list(colour_cluster_point_list)
 
     # Publish
-    pcl_objects_pub.publish(pcl_to_ros(cloud_filtered))
-    # pcl_objects_pub.publish(pcl_to_ros(object_cloud))
-    # pcl_table_pub.publish(pcl_to_ros(table_cloud))
+    pcl_objects_pub.publish(pcl_to_ros(object_cloud))
+    pcl_table_pub.publish(pcl_to_ros(table_cloud))
     # pcl_cluster_pub.publish(pcl_to_ros(cluster_cloud))
 
 # Exercise-3 TODOs:
