@@ -89,7 +89,6 @@ def pcl_callback(pcl_msg):
     ec.set_SearchMethod(tree)
     cluster_indices = ec.Extract()
 
-
     # Cluster-Mask Point Cloud to visualize each cluster separately
     cluster_colour = get_color_list(len(cluster_indices))
     colour_cluster_point_list = []
