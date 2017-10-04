@@ -178,7 +178,7 @@ def pr2_mover(object_centroids):
 
     # Loop through the pick list
     yaml_out = []
-    for obj in object_list_param:
+    for obj in OBJECT_LIST_PARAM:
         # Fetch the centroid
         if obj["name"] in object_centroids:
             centroid = object_centroids[obj["name"]]
@@ -217,8 +217,8 @@ def pr2_mover(object_centroids):
 if __name__ == '__main__':
     rospy.init_node("clustering", anonymous=True)
     # Get/Read parameters
-    object_list_param = rospy.get_param('/object_list')
-    TEST_SCENE_NUM = {3: 1, 5: 2, 8: 3}[len(object_list_param)]
+    OBJECT_LIST_PARAM = rospy.get_param('/object_list')
+    TEST_SCENE_NUM = {3: 1, 5: 2, 8: 3}[len(OBJECT_LIST_PARAM)]
 
     # Subscriber
     pcl_sub = rospy.Subscriber("/pr2/world/points", pc2.PointCloud2, pcl_callback, queue_size=1)
