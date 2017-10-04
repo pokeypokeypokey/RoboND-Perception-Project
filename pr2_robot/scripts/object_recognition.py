@@ -213,7 +213,7 @@ if __name__ == '__main__':
     # Load model
     rospack = rospkg.RosPack()
     package_url = rospack.get_path("pr2_robot")
-    model_url = package_url + "/models_classification/model_simple+size.sav"
+    model_url = package_url + "/models_classification/model_hsv_c1c2c3_size.sav"
 
     model = pickle.load(open(model_url, 'rb'))
     clf = model['classifier']

@@ -36,7 +36,6 @@ def compute_color_histograms(cloud, using_hsv=False):
                                atan2(rgb[2], max(rgb[0],rgb[1])))
     
     col_hist = make_hist_feature(point_colors[:, :i], 0, 256, 32)
-    return col_hist
     cx_hist  = make_hist_feature(c1c2c3_colors[:, :i], 0, pi/2., 32)
     return np.concatenate((col_hist, cx_hist))
 
@@ -65,9 +64,8 @@ def compute_size(cloud):
     return (max_x - min_x, max_y - min_y, max_z - min_z)
 
 def compute_all_features(cloud, normal_cloud):
-    chists = compute_color_histograms(cloud, using_hsv=False)
+    chists = compute_color_histograms(cloud, using_hsv=True)
     nhists = compute_normal_histograms(normal_cloud)
-    return np.concatenate((chists, nhists))
     bounds = compute_size(cloud)
 
     return np.concatenate((chists, nhists, bounds))
