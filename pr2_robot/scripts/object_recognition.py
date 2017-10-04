@@ -130,7 +130,7 @@ def pcl_callback(pcl_msg):
 
         # Make the prediction, retrieve the label for the result
         # and add it to detected_objects_labels list
-        prediction = clf.predict(scaler.transform(feature.reshape(1,-1)))
+        prediction = clf.predict(scaler.transform(feature.reshape(1, -1)))
         label = encoder.inverse_transform(prediction)[0]
         detected_object_labels.append(label)
 
@@ -213,7 +213,7 @@ if __name__ == '__main__':
     # Load model
     rospack = rospkg.RosPack()
     package_url = rospack.get_path("pr2_robot")
-    model_url = package_url + "/models_classification/model_simple.sav"
+    model_url = package_url + "/models_classification/model_simple+size.sav"
 
     model = pickle.load(open(model_url, 'rb'))
     clf = model['classifier']

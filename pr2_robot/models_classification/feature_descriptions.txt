@@ -1,0 +1,3 @@
+Features simple:
+RGB: 32 bins p/channel
+normals: 12 bins p/channel

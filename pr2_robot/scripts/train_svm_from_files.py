@@ -59,6 +59,7 @@ def plot_confusion_matrix(cm, classes,
 
 if __name__ == "__main__":
     rospy.init_node('train_from_file_node')
+    pcl_objects_pub = rospy.Publisher("/pr2/pcl_objects", PointCloud2, queue_size=1)
 
     # Features
     labeled_features = []
@@ -68,6 +69,8 @@ if __name__ == "__main__":
         for c_url in glob.glob(MODELS_URL + model_name + "/*.pcd"):
             cloud = pcl.load_XYZRGB(c_url)
             cloud_r = pcl_to_ros(cloud)
+
+            pcl_objects_pub.publish(cloud_r)
 
             # chists = compute_color_histograms(cloud_r, using_hsv=True)
             # nhists = compute_normal_histograms(get_normals(cloud_r))
