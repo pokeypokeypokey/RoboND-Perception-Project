@@ -25,7 +25,6 @@ from rospy_message_converter import message_converter
 import yaml
 
 
-TEST_SCENE_NUM = 1
 PLACE_POSES = {"red":   (0,  0.71, 0.605),
                "green": (0, -0.71, 0.605)}
 ARM_TO_USE = {"red":   "left",
@@ -175,9 +174,6 @@ def pcl_callback(pcl_msg):
 
 # function to load parameters and request PickPlace service
 def pr2_mover(object_centroids):
-    # Get/Read parameters
-    object_list_param = rospy.get_param('/object_list')
-
     # TODO: Rotate PR2 in place to capture side tables for the collision map
 
     # Loop through the pick list
@@ -206,7 +202,7 @@ def pr2_mover(object_centroids):
         # try:
         #     pick_place_routine = rospy.ServiceProxy('pick_place_routine', PickPlace)
 
-        #     # TODO: Insert your message variables to be sent as a service request
+        #     # Send as a service request
         #     resp = pick_place_routine(test_scene_num, obj_name, arm_name, pick_pose, place_pose)
 
         #     print ("Response: ", resp.success)
@@ -220,6 +216,9 @@ def pr2_mover(object_centroids):
 
 if __name__ == '__main__':
     rospy.init_node("clustering", anonymous=True)
+    # Get/Read parameters
+    object_list_param = rospy.get_param('/object_list')
+    TEST_SCENE_NUM = {3: 1, 5: 2, 8: 3}[len(object_list_param)]
 
     # Subscriber
     pcl_sub = rospy.Subscriber("/pr2/world/points", pc2.PointCloud2, pcl_callback, queue_size=1)
