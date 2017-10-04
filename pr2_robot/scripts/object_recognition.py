@@ -6,8 +6,9 @@ import sklearn
 from sklearn.preprocessing import LabelEncoder
 import pickle
 from sensor_stick.srv import GetNormals
-from sensor_stick.features import compute_color_histograms
-from sensor_stick.features import compute_normal_histograms
+# from sensor_stick.features import compute_color_histograms
+# from sensor_stick.features import compute_normal_histograms
+from features import compute_all_features
 from visualization_msgs.msg import Marker
 from sensor_stick.marker_tools import *
 from sensor_stick.msg import DetectedObjectsArray
@@ -125,13 +126,11 @@ def pcl_callback(pcl_msg):
         pcl_cluster = pcl_to_ros(object_cloud.extract(pts_list))
 
         # Compute the associated feature vector
-        chists = compute_color_histograms(pcl_cluster, using_hsv=True)
-        nhists = compute_normal_histograms(get_normals(pcl_cluster))
-        feature = np.concatenate((chists, nhists))
+        feature = compute_all_features(pcl_cluster, get_normals(pcl_cluster))
 
         # Make the prediction, retrieve the label for the result
         # and add it to detected_objects_labels list
-        prediction = clf.predict(scaler.transform(feature.reshape(1,-1)))
+        prediction = clf.predict(scaler.transform(feature.reshape(1, -1)))
         label = encoder.inverse_transform(prediction)[0]
         detected_object_labels.append(label)
 
@@ -214,7 +213,7 @@ if __name__ == '__main__':
     # Load model
     rospack = rospkg.RosPack()
     package_url = rospack.get_path("pr2_robot")
-    model_url = package_url + "/models_classification/model1.sav"
+    model_url = package_url + "/models_classification/model_hsv_c1c2c3_size.sav"
 
     model = pickle.load(open(model_url, 'rb'))
     clf = model['classifier']
