@@ -6,8 +6,6 @@ import sklearn
 from sklearn.preprocessing import LabelEncoder
 import pickle
 from sensor_stick.srv import GetNormals
-# from sensor_stick.features import compute_color_histograms
-# from sensor_stick.features import compute_normal_histograms
 from features import compute_all_features
 from visualization_msgs.msg import Marker
 from sensor_stick.marker_tools import *
@@ -119,14 +117,16 @@ def pcl_callback(pcl_msg):
 
     # Classify the clusters (loop through each detected cluster one at a time)
     detected_object_labels = []
-    detected_objects = []
+    detected_objects_list = []
+    object_centroids = {}
 
     for idx, pts_list in enumerate(cluster_indices):
         # Grab the points for the cluster
-        pcl_cluster = pcl_to_ros(object_cloud.extract(pts_list))
+        pcl_cluster = object_cloud.extract(pts_list)
+        pcl_cluster_r = pcl_to_ros(pcl_cluster)
 
         # Compute the associated feature vector
-        feature = compute_all_features(pcl_cluster, get_normals(pcl_cluster))
+        feature = compute_all_features(pcl_cluster_r, get_normals(pcl_cluster_r))
 
         # Make the prediction, retrieve the label for the result
         # and add it to detected_objects_labels list
@@ -142,36 +142,35 @@ def pcl_callback(pcl_msg):
         # Add the detected object to the list of detected objects.
         do = DetectedObject()
         do.label = label
-        do.cloud = pcl_cluster
-        detected_objects.append(do)
+        do.cloud = pcl_cluster_r
+        detected_objects_list.append(do)
+
+        # Store centroid
+        object_centroids[label] = np.mean(pcl_cluster.to_array(), axis=0)[:3]
+        
 
     # Publish the list of detected objects
     # rospy.loginfo('Detected {} objects: {}'.format(len(detected_object_labels), detected_object_labels))
-    detected_objects_pub.publish(detected_objects)
+    detected_objects_pub.publish(detected_objects_list)
 
     # Suggested location for where to invoke your pr2_mover() function within pcl_callback()
     # Could add some logic to determine whether or not your object detections are robust
     # before calling pr2_mover()
     try:
-        pass
-        #pr2_mover(detected_objects_list)
+        pr2_mover(object_centroids)
     except rospy.ROSInterruptException:
         pass
 
 # function to load parameters and request PickPlace service
-def pr2_mover(object_list):
-
-    # TODO: Initialize variables
-
-    # TODO: Get/Read parameters
-
-    # TODO: Parse parameters into individual variables
+def pr2_mover(object_centroids):
+    # Get/Read parameters
+    object_list_param = rospy.get_param('/object_list')
 
     # TODO: Rotate PR2 in place to capture side tables for the collision map
 
-    # TODO: Loop through the pick list
-
-        # TODO: Get the PointCloud for a given object and obtain it's centroid
+    # Loop through the pick list
+    for i, obj in object_list_param:
+        # Get the PointCloud for a given object and obtain it's centroid
 
         # TODO: Create 'place_pose' for the object
 
