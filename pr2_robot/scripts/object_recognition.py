@@ -6,8 +6,6 @@ import sklearn
 from sklearn.preprocessing import LabelEncoder
 import pickle
 from sensor_stick.srv import GetNormals
-# from sensor_stick.features import compute_color_histograms
-# from sensor_stick.features import compute_normal_histograms
 from features import compute_all_features
 from visualization_msgs.msg import Marker
 from sensor_stick.marker_tools import *
@@ -25,6 +23,12 @@ from std_msgs.msg import String
 from pr2_robot.srv import *
 from rospy_message_converter import message_converter
 import yaml
+
+
+PLACE_POSES = {"red":   (0,  0.71, 0.605),
+               "green": (0, -0.71, 0.605)}
+ARM_TO_USE = {"red":   "left",
+              "green": "right"}
 
 
 # Helper function to get surface normals
@@ -47,6 +51,11 @@ def send_to_yaml(yaml_filename, dict_list):
     data_dict = {"object_list": dict_list}
     with open(yaml_filename, 'w') as outfile:
         yaml.dump(data_dict, outfile, default_flow_style=False)
+
+def make_pose_message(position):
+    msg = Pose()
+    msg.position.x, msg.position.y, msg.position.z = position
+    return msg
 
 def passthrough_cloud(cloud, axis, start, end):
     passthrough = cloud.make_passthrough_filter()
@@ -119,14 +128,16 @@ def pcl_callback(pcl_msg):
 
     # Classify the clusters (loop through each detected cluster one at a time)
     detected_object_labels = []
-    detected_objects = []
+    detected_objects_list = []
+    object_centroids = {}
 
     for idx, pts_list in enumerate(cluster_indices):
         # Grab the points for the cluster
-        pcl_cluster = pcl_to_ros(object_cloud.extract(pts_list))
+        pcl_cluster = object_cloud.extract(pts_list)
+        pcl_cluster_r = pcl_to_ros(pcl_cluster)
 
         # Compute the associated feature vector
-        feature = compute_all_features(pcl_cluster, get_normals(pcl_cluster))
+        feature = compute_all_features(pcl_cluster_r, get_normals(pcl_cluster_r))
 
         # Make the prediction, retrieve the label for the result
         # and add it to detected_objects_labels list
@@ -142,63 +153,72 @@ def pcl_callback(pcl_msg):
         # Add the detected object to the list of detected objects.
         do = DetectedObject()
         do.label = label
-        do.cloud = pcl_cluster
-        detected_objects.append(do)
+        do.cloud = pcl_cluster_r
+        detected_objects_list.append(do)
+
+        # Store centroid
+        object_centroids[label] = np.mean(pcl_cluster.to_array(), axis=0)[:3]
+        
 
     # Publish the list of detected objects
     # rospy.loginfo('Detected {} objects: {}'.format(len(detected_object_labels), detected_object_labels))
-    detected_objects_pub.publish(detected_objects)
+    detected_objects_pub.publish(detected_objects_list)
 
     # Suggested location for where to invoke your pr2_mover() function within pcl_callback()
     # Could add some logic to determine whether or not your object detections are robust
     # before calling pr2_mover()
     try:
-        pass
-        #pr2_mover(detected_objects_list)
+        pr2_mover(object_centroids)
     except rospy.ROSInterruptException:
         pass
 
 # function to load parameters and request PickPlace service
-def pr2_mover(object_list):
-
-    # TODO: Initialize variables
-
-    # TODO: Get/Read parameters
-
-    # TODO: Parse parameters into individual variables
-
+def pr2_mover(object_centroids):
     # TODO: Rotate PR2 in place to capture side tables for the collision map
 
-    # TODO: Loop through the pick list
+    # Loop through the pick list
+    yaml_out = []
+    for obj in OBJECT_LIST_PARAM:
+        # Fetch the centroid
+        if obj["name"] in object_centroids:
+            centroid = object_centroids[obj["name"]]
+        else:
+            # We're only interested in objects on the list
+            continue
 
-        # TODO: Get the PointCloud for a given object and obtain it's centroid
+        # Create message components
+        test_scene_num = Int32(TEST_SCENE_NUM)
+        obj_name = String(obj["name"])
+        arm_name = String(ARM_TO_USE[obj["group"]])
+        place_pose = make_pose_message(PLACE_POSES[obj["group"]])
+        pick_pose = make_pose_message(map(np.asscalar, centroid))
 
-        # TODO: Create 'place_pose' for the object
-
-        # TODO: Assign the arm to be used for pick_place
-
-        # TODO: Create a list of dictionaries (made with make_yaml_dict()) for later output to yaml format
+        # yaml output
+        yaml_out.append(make_yaml_dict(test_scene_num, arm_name, obj_name, pick_pose, place_pose))
 
         # Wait for 'pick_place_routine' service to come up
         rospy.wait_for_service('pick_place_routine')
 
-        try:
-            pick_place_routine = rospy.ServiceProxy('pick_place_routine', PickPlace)
+        # try:
+        #     pick_place_routine = rospy.ServiceProxy('pick_place_routine', PickPlace)
 
-            # TODO: Insert your message variables to be sent as a service request
-            resp = pick_place_routine(TEST_SCENE_NUM, OBJECT_NAME, WHICH_ARM, PICK_POSE, PLACE_POSE)
+        #     # Send as a service request
+        #     resp = pick_place_routine(test_scene_num, obj_name, arm_name, pick_pose, place_pose)
 
-            print ("Response: ", resp.success)
+        #     print ("Response: ", resp.success)
 
-        except rospy.ServiceException, e:
-            print "Service call failed: %s"%e
+        # except rospy.ServiceException, e:
+        #     print "Service call failed: %s"%e
 
-    # TODO: Output your request parameters into output yaml file
-
+    # Output request parameters into yaml file
+    send_to_yaml(package_url + "/config/output_%i.yaml" % TEST_SCENE_NUM, yaml_out)
 
 
 if __name__ == '__main__':
     rospy.init_node("clustering", anonymous=True)
+    # Get/Read parameters
+    OBJECT_LIST_PARAM = rospy.get_param('/object_list')
+    TEST_SCENE_NUM = {3: 1, 5: 2, 8: 3}[len(OBJECT_LIST_PARAM)]
 
     # Subscriber
     pcl_sub = rospy.Subscriber("/pr2/world/points", pc2.PointCloud2, pcl_callback, queue_size=1)
