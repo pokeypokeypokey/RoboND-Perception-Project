@@ -211,7 +211,7 @@ def pr2_mover(object_centroids):
         #     print "Service call failed: %s"%e
 
     # Output request parameters into yaml file
-    send_to_yaml(package_url + "/config/output%i.yaml" % TEST_SCENE_NUM, yaml_out)
+    send_to_yaml(package_url + "/config/output_%i.yaml" % TEST_SCENE_NUM, yaml_out)
 
 
 if __name__ == '__main__':
