@@ -94,7 +94,7 @@ def pcl_callback(pcl_msg):
     seg.set_distance_threshold(0.01)
     inliers, _ = seg.segment()
 
-    # # Extract inliers and outliers
+    # Extract inliers and outliers
     object_cloud = cloud_filtered.extract(inliers, negative=True)
     table_cloud  = cloud_filtered.extract(inliers, negative=False)
 
@@ -175,6 +175,7 @@ def pcl_callback(pcl_msg):
 # function to load parameters and request PickPlace service
 def pr2_mover(object_centroids):
     # TODO: Rotate PR2 in place to capture side tables for the collision map
+    pub_base_joint.publish(-np.pi/2.)
 
     # Loop through the pick list
     yaml_out = []
@@ -229,6 +230,7 @@ if __name__ == '__main__':
     pcl_cluster_pub = rospy.Publisher("/pr2/pcl_cluster", PointCloud2, queue_size=1)
     object_markers_pub = rospy.Publisher("/object_markers", Marker, queue_size=1)
     detected_objects_pub = rospy.Publisher("/detexted_objects", DetectedObjectsArray, queue_size=1)
+    pub_base_joint = rospy.Publisher("/pr2/world_joint_controller/command", Float64, queue_size=10)
 
     # Load model
     rospack = rospkg.RosPack()
