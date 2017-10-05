@@ -25,6 +25,17 @@ from rospy_message_converter import message_converter
 import yaml
 
 
+class StateEnum(object):
+    def __init__(self, pick_n):
+        self.look_left  = 0
+        self.look_right = 1
+        self.look_straight = 2
+        self.finish = pick_n + 3
+
+        for i in xrange(pick_n):
+            setattr(self, "pick_%i" % (i+1), (i+3))
+
+
 class ObjectPicker(object):
     PLACE_POSES = {"red":   (0,  0.71, 0.605),
                    "green": (0, -0.71, 0.605)}
@@ -36,7 +47,12 @@ class ObjectPicker(object):
 
         # Get/Read parameters
         self.OBJECT_LIST_PARAM = rospy.get_param('/object_list')
-        self.TEST_SCENE_NUM = {3: 1, 5: 2, 8: 3}[len(self.OBJECT_LIST_PARAM)]
+        param_n = len(self.OBJECT_LIST_PARAM)
+        self.TEST_SCENE_NUM = {3: 1, 5: 2, 8: 3}[param_n]
+
+        # Robot states
+        self.R_STATES = StateEnum(param_n)
+        self.r_state = self.R_STATES.look_left # Start looking left
 
         # Subscriber
         self.pcl_sub = rospy.Subscriber("/pr2/world/points", pc2.PointCloud2, self.pcl_callback, queue_size=1)
@@ -50,8 +66,7 @@ class ObjectPicker(object):
         self.pub_base_joint = rospy.Publisher("/pr2/world_joint_controller/command", Float64, queue_size=10)
 
         # Load model
-        rospack = rospkg.RosPack()
-        self.package_url = rospack.get_path("pr2_robot")
+        self.package_url = rospkg.RosPack().get_path("pr2_robot")
         model_url = self.package_url + "/models_classification/model_hsv_c1c2c3_size.sav"
         model = pickle.load(open(model_url, 'rb'))
 
