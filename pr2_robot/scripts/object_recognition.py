@@ -175,7 +175,7 @@ def pcl_callback(pcl_msg):
 # function to load parameters and request PickPlace service
 def pr2_mover(object_centroids):
     # TODO: Rotate PR2 in place to capture side tables for the collision map
-    pub_base_joint.publish(-np.pi/2.)
+    # pub_base_joint.publish(-np.pi/2.)
 
     # Loop through the pick list
     yaml_out = []
