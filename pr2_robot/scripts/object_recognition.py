@@ -23,6 +23,7 @@ from std_msgs.msg import String
 from pr2_robot.srv import *
 from rospy_message_converter import message_converter
 import yaml
+from math import atan2
 
 
 class StateEnum(object):
@@ -143,6 +144,9 @@ class ObjectPicker(object):
         # get current rotation
         try:
             _, rot = self.tf_listen.lookupTransform("/world", "/base_footprint", rospy.Time(0))
+            # Get rotation about z from quaternion
+            current_angle = atan2(2*(rot[0]*rot[1] + rot[2]*rot[3]), 
+                                  1 - 2*(rot[1]**2 + rot[2]**2))
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
             return
 
@@ -150,8 +154,7 @@ class ObjectPicker(object):
         self.pub_base_joint.publish(target_angle)
 
         # Check if target reached
-        if self.angle_is_close(2*rot[2], target_angle):
-            # TODO: why is tf angle half?
+        if self.angle_is_close(current_angle, target_angle):
             self.r_state = next_state
 
     def accumulate_collisions(self, table_cloud):
