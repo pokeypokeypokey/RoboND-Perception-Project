@@ -41,6 +41,9 @@ class ObjectPicker(object):
                    "green": (0, -0.71, 0.605)}
     ARM_TO_USE = {"red":   "left",
                   "green": "right"}
+    ANGLE_LEFT  = np.pi/2. # 0.707
+    ANGLE_RIGHT = -np.pi/2. # -0.707
+
 
     def __init__(self):
         rospy.init_node("object_picker", anonymous=True)
@@ -56,6 +59,7 @@ class ObjectPicker(object):
 
         # Subscriber
         self.pcl_sub = rospy.Subscriber("/pr2/world/points", pc2.PointCloud2, self.pcl_callback, queue_size=1)
+        self.tf_listen = tf.TransformListener()
 
         # Publishers
         self.pcl_objects_pub = rospy.Publisher("/pr2/pcl_objects", PointCloud2, queue_size=1)
@@ -80,6 +84,9 @@ class ObjectPicker(object):
 
         while not rospy.is_shutdown():
             rospy.spin()
+
+    def angle_is_close(self, a1, a2, eps=0.1):
+        return (abs(a1-a2) < eps)
 
     # Helper function to get surface normals
     def get_normals(self, cloud):
@@ -132,16 +139,34 @@ class ObjectPicker(object):
 
         return cloud_filtered
 
+    def update_move_state(self, target_angle, next_state):
+        # get current rotation
+        try:
+            _, rot = self.tf_listen.lookupTransform("/world", "/base_footprint", rospy.Time(0))
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            return
+
+        # Set target
+        self.pub_base_joint.publish(target_angle)
+
+        # Check if target reached
+        if self.angle_is_close(2*rot[2], target_angle):
+            # TODO: why is tf angle half?
+            self.r_state = next_state
+
     def accumulate_collisions(self, table_cloud):
-        # look around
+        # move dat boday
         if self.r_state == self.R_STATES.look_left:
-            pub_base_joint.publish(np.pi/2.)
-        elif self.r_state == self.R_STATES.look_left:
-            pub_base_joint.publish(-np.pi/2.)
+            self.update_move_state(self.ANGLE_LEFT, self.R_STATES.look_right)
+
+        elif self.r_state == self.R_STATES.look_right:
+            self.update_move_state(self.ANGLE_RIGHT, self.R_STATES.look_straight)
+
         else:
-            pub_base_joint.publish(0)
+            self.update_move_state(0, self.R_STATES.pick_1)
 
         # accumulate and store collision
+        self.pcl_table_pub.publish(pcl_to_ros(table_cloud))
 
 
     # function to load parameters and request PickPlace service
@@ -210,7 +235,6 @@ class ObjectPicker(object):
 
         # Publish
         self.pcl_objects_pub.publish(pcl_to_ros(object_cloud))
-        self.pcl_table_pub.publish(pcl_to_ros(table_cloud))
         self.pcl_cluster_pub.publish(pcl_to_ros(cluster_cloud))
 
         # Classify the clusters (loop through each detected cluster one at a time)
