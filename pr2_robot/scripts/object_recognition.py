@@ -30,7 +30,7 @@ class StateEnum(object):
         self.look_left  = 0
         self.look_right = 1
         self.look_straight = 2
-        self.finish = pick_n + 3
+        self.finish = pick_n+3
 
         for i in xrange(pick_n):
             setattr(self, "pick_%i" % (i+1), (i+3))
@@ -132,22 +132,59 @@ class ObjectPicker(object):
 
         return cloud_filtered
 
-    # Callback function for your Point Cloud Subscriber
-    def pcl_callback(self, pcl_msg):
-        cloud = ros_to_pcl(pcl_msg)
-        cloud_filtered = self.filter_cloud(cloud)
+    def accumulate_collisions(self, table_cloud):
+        # look around
+        if self.r_state == self.R_STATES.look_left:
+            pub_base_joint.publish(np.pi/2.)
+        elif self.r_state == self.R_STATES.look_left:
+            pub_base_joint.publish(-np.pi/2.)
+        else:
+            pub_base_joint.publish(0)
 
-        # RANSAC Plane Segmentation
-        seg = cloud_filtered.make_segmenter()
-        seg.set_model_type(pcl.SACMODEL_PLANE)
-        seg.set_method_type(pcl.SAC_RANSAC) 
-        seg.set_distance_threshold(0.01)
-        inliers, _ = seg.segment()
+        # accumulate and store collision
 
-        # Extract inliers and outliers
-        object_cloud = cloud_filtered.extract(inliers, negative=True)
-        table_cloud  = cloud_filtered.extract(inliers, negative=False)
 
+    # function to load parameters and request PickPlace service
+    def pr2_mover(self, object_centroids):
+        # Loop through the pick list
+        yaml_out = []
+        for obj in self.OBJECT_LIST_PARAM:
+            # Fetch the centroid
+            if obj["name"] in object_centroids:
+                centroid = object_centroids[obj["name"]]
+            else:
+                # We're only interested in objects on the list
+                continue
+
+            # Create message components
+            test_scene_num = Int32(self.TEST_SCENE_NUM)
+            obj_name = String(obj["name"])
+            arm_name = String(self.ARM_TO_USE[obj["group"]])
+            place_pose = self.make_pose_message(self.PLACE_POSES[obj["group"]])
+            pick_pose  = self.make_pose_message(map(np.asscalar, centroid))
+
+            # yaml output
+            yaml_out.append(self.make_yaml_dict(test_scene_num, arm_name, 
+                                                obj_name, pick_pose, place_pose))
+
+            # Wait for 'pick_place_routine' service to come up
+            rospy.wait_for_service('pick_place_routine')
+
+            # try:
+            #     pick_place_routine = rospy.ServiceProxy('pick_place_routine', PickPlace)
+
+            #     # Send as a service request
+            #     resp = pick_place_routine(test_scene_num, obj_name, arm_name, pick_pose, place_pose)
+
+            #     print ("Response: ", resp.success)
+
+            # except rospy.ServiceException, e:
+            #     print "Service call failed: %s"%e
+
+        # Output request parameters into yaml file
+        # self.send_to_yaml(package_url + "/config/output_%i.yaml" % self.TEST_SCENE_NUM, yaml_out)
+
+    def pick_objects(self, object_cloud):
         # Clustering
         white_cloud = XYZRGB_to_XYZ(object_cloud)
         tree = white_cloud.make_kdtree()
@@ -209,61 +246,40 @@ class ObjectPicker(object):
             # Store centroid
             object_centroids[label] = np.mean(pcl_cluster.to_array(), axis=0)[:3]
             
-
         # Publish the list of detected objects
         # rospy.loginfo('Detected {} objects: {}'.format(len(detected_object_labels), detected_object_labels))
         self.detected_objects_pub.publish(detected_objects_list)
 
-        # Suggested location for where to invoke your pr2_mover() function within pcl_callback()
-        # Could add some logic to determine whether or not your object detections are robust
-        # before calling pr2_mover()
         try:
             self.pr2_mover(object_centroids)
         except rospy.ROSInterruptException:
             pass
 
-    # function to load parameters and request PickPlace service
-    def pr2_mover(self, object_centroids):
-        # TODO: Rotate PR2 in place to capture side tables for the collision map
-        # pub_base_joint.publish(-np.pi/2.)
+    # Callback function for your Point Cloud Subscriber
+    def pcl_callback(self, pcl_msg):
+        cloud = ros_to_pcl(pcl_msg)
+        cloud_filtered = self.filter_cloud(cloud)
 
-        # Loop through the pick list
-        yaml_out = []
-        for obj in self.OBJECT_LIST_PARAM:
-            # Fetch the centroid
-            if obj["name"] in object_centroids:
-                centroid = object_centroids[obj["name"]]
-            else:
-                # We're only interested in objects on the list
-                continue
+        # RANSAC Plane Segmentation
+        seg = cloud_filtered.make_segmenter()
+        seg.set_model_type(pcl.SACMODEL_PLANE)
+        seg.set_method_type(pcl.SAC_RANSAC) 
+        seg.set_distance_threshold(0.01)
+        inliers, _ = seg.segment()
 
-            # Create message components
-            test_scene_num = Int32(self.TEST_SCENE_NUM)
-            obj_name = String(obj["name"])
-            arm_name = String(self.ARM_TO_USE[obj["group"]])
-            place_pose = self.make_pose_message(self.PLACE_POSES[obj["group"]])
-            pick_pose  = self.make_pose_message(map(np.asscalar, centroid))
+        # Extract inliers and outliers
+        object_cloud = cloud_filtered.extract(inliers, negative=True)
+        table_cloud  = cloud_filtered.extract(inliers, negative=False)
 
-            # yaml output
-            yaml_out.append(self.make_yaml_dict(test_scene_num, arm_name, 
-                                                obj_name, pick_pose, place_pose))
+        if self.r_state < self.R_STATES.pick_1:
+            # build collision map
+            self.accumulate_collisions(table_cloud)
 
-            # Wait for 'pick_place_routine' service to come up
-            rospy.wait_for_service('pick_place_routine')
-
-            # try:
-            #     pick_place_routine = rospy.ServiceProxy('pick_place_routine', PickPlace)
-
-            #     # Send as a service request
-            #     resp = pick_place_routine(test_scene_num, obj_name, arm_name, pick_pose, place_pose)
-
-            #     print ("Response: ", resp.success)
-
-            # except rospy.ServiceException, e:
-            #     print "Service call failed: %s"%e
-
-        # Output request parameters into yaml file
-        # self.send_to_yaml(package_url + "/config/output_%i.yaml" % self.TEST_SCENE_NUM, yaml_out)
+        elif self.r_state < self.R_STATES.finish:
+            # identify objects and pick them up
+            self.pick_objects(object_cloud)
+        # else:
+            # do nothing, we're done
 
 
 if __name__ == '__main__':
