@@ -57,18 +57,24 @@ class ObjectPicker(object):
         # Robot states
         self.R_STATES = StateEnum(param_n)
         self.r_state = self.R_STATES.look_left # Start looking left
+        # self.r_state = self.R_STATES.look_straight 
 
         # Subscriber
         self.pcl_sub = rospy.Subscriber("/pr2/world/points", pc2.PointCloud2, self.pcl_callback, queue_size=1)
         self.tf_listen = tf.TransformListener()
 
         # Publishers
-        self.pcl_objects_pub = rospy.Publisher("/pr2/pcl_objects", PointCloud2, queue_size=1)
-        self.pcl_table_pub   = rospy.Publisher("/pr2/pcl_table",   PointCloud2, queue_size=1)
-        self.pcl_cluster_pub = rospy.Publisher("/pr2/pcl_cluster", PointCloud2, queue_size=1)
+        self.objects_pub = rospy.Publisher("/pr2/pcl_objects", PointCloud2, queue_size=1)
+        self.table_pub = rospy.Publisher("/pr2/pcl_table", PointCloud2, queue_size=1)
+        self.coll_pub  = rospy.Publisher("/pr2/3D_map/points", PointCloud2, queue_size=1)
+        self.cluster_pub = rospy.Publisher("/pr2/pcl_cluster", PointCloud2, queue_size=1)
         self.object_markers_pub = rospy.Publisher("/object_markers", Marker, queue_size=1)
         self.detected_objects_pub = rospy.Publisher("/detexted_objects", DetectedObjectsArray, queue_size=1)
         self.pub_base_joint = rospy.Publisher("/pr2/world_joint_controller/command", Float64, queue_size=10)
+
+        # Collision clouds
+        self.collision_cloud_table = pcl.PointCloud_PointXYZRGB() # empty point cloud
+        self.collision_colour = rgb_to_float(random_color_gen())
 
         # Load model
         self.package_url = rospkg.RosPack().get_path("pr2_robot")
@@ -86,8 +92,22 @@ class ObjectPicker(object):
         while not rospy.is_shutdown():
             rospy.spin()
 
-    def angle_is_close(self, a1, a2, eps=0.1):
+    def angle_is_close(self, a1, a2, eps=0.01):
         return (abs(a1-a2) < eps)
+
+    def downsample_cloud(self, cloud, leaf_size):
+        vox = cloud.make_voxel_grid_filter()
+        vox.set_leaf_size(leaf_size, leaf_size, leaf_size)
+        return vox.filter()
+
+    def combine_clouds(self, cloud1, cloud2, ds_leaf_size=0.01):
+        # Combine into new cloud
+        combined_arr = np.concatenate((cloud1.to_array(), cloud2.to_array()))
+        combined = pcl.PointCloud_PointXYZRGB()
+        combined.from_array(combined_arr)
+
+        # Downsample (to remove duplicates)
+        return self.downsample_cloud(combined, ds_leaf_size)
 
     # Helper function to get surface normals
     def get_normals(self, cloud):
@@ -123,14 +143,12 @@ class ObjectPicker(object):
 
     def filter_cloud(self, cloud):
         # Voxel Grid filter
-        vox = cloud.make_voxel_grid_filter()
-        LEAF_SIZE = 0.005
-        vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
-        cloud_filtered = vox.filter()
+        cloud_filtered = self.downsample_cloud(cloud, 0.005)
 
         # PassThrough filter
         cloud_filtered = self.passthrough_cloud(cloud_filtered, "z", 0.6, 0.8)
-        cloud_filtered = self.passthrough_cloud(cloud_filtered, "y", -0.4, 0.4)
+        if self.r_state >= self.R_STATES.pick_1:
+            cloud_filtered = self.passthrough_cloud(cloud_filtered, "y", -0.4, 0.4)
 
         # Outlier filter
         outlier_filter = cloud_filtered.make_statistical_outlier_filter()
@@ -169,7 +187,10 @@ class ObjectPicker(object):
             self.update_move_state(0, self.R_STATES.pick_1)
 
         # accumulate and store collision
-        self.pcl_table_pub.publish(pcl_to_ros(table_cloud))
+        self.collision_cloud_table = self.combine_clouds(self.collision_cloud_table, table_cloud)
+
+        self.table_pub.publish(pcl_to_ros(table_cloud))
+        self.coll_pub.publish(pcl_to_ros(self.collision_cloud_table))
 
 
     # function to load parameters and request PickPlace service
@@ -237,8 +258,8 @@ class ObjectPicker(object):
         cluster_cloud.from_list(colour_cluster_point_list)
 
         # Publish
-        self.pcl_objects_pub.publish(pcl_to_ros(object_cloud))
-        self.pcl_cluster_pub.publish(pcl_to_ros(cluster_cloud))
+        self.objects_pub.publish(pcl_to_ros(object_cloud))
+        self.cluster_pub.publish(pcl_to_ros(cluster_cloud))
 
         # Classify the clusters (loop through each detected cluster one at a time)
         detected_object_labels = []
