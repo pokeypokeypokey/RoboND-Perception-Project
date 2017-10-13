@@ -42,12 +42,15 @@ class ObjectPicker(object):
                    "green": (0, -0.71, 0.605)}
     ARM_TO_USE = {"red":   "left",
                   "green": "right"}
-    ANGLE_LEFT  = np.pi/2. # 0.707
+    ANGLE_LEFT  =  np.pi/2. # 0.707
     ANGLE_RIGHT = -np.pi/2. # -0.707
+
+    FRESH_SCAN = False
 
 
     def __init__(self):
         rospy.init_node("object_picker", anonymous=True)
+        self.package_url = rospkg.RosPack().get_path("pr2_robot")
 
         # Get/Read parameters
         self.OBJECT_LIST_PARAM = rospy.get_param('/object_list')
@@ -56,8 +59,6 @@ class ObjectPicker(object):
 
         # Robot states
         self.R_STATES = StateEnum(param_n)
-        self.r_state = self.R_STATES.look_left # Start looking left
-        # self.r_state = self.R_STATES.look_straight 
 
         # Subscriber
         self.pcl_sub = rospy.Subscriber("/pr2/world/points", pc2.PointCloud2, self.pcl_callback, queue_size=1)
@@ -73,11 +74,15 @@ class ObjectPicker(object):
         self.pub_base_joint = rospy.Publisher("/pr2/world_joint_controller/command", Float64, queue_size=10)
 
         # Collision clouds
-        self.collision_cloud_table = pcl.PointCloud_PointXYZRGB() # empty point cloud
-        self.collision_colour = rgb_to_float(random_color_gen())
+        if self.FRESH_SCAN:
+            self.r_state = self.R_STATES.look_left # Start looking left
+            self.collision_cloud_table = pcl.PointCloud_PointXYZRGB() # empty point cloud
+        else:
+            self.r_state = self.R_STATES.look_straight
+            c_url = self.package_url + "/clouds/collision_cloud.pcd"
+            self.collision_cloud_table = pcl.load_XYZRGB(c_url) # load point cloud
 
         # Load model
-        self.package_url = rospkg.RosPack().get_path("pr2_robot")
         model_url = self.package_url + "/models_classification/model_hsv_c1c2c3_size.sav"
         model = pickle.load(open(model_url, 'rb'))
 
@@ -100,9 +105,9 @@ class ObjectPicker(object):
         vox.set_leaf_size(leaf_size, leaf_size, leaf_size)
         return vox.filter()
 
-    def combine_clouds(self, cloud1, cloud2, ds_leaf_size=0.01):
+    def combine_clouds(self, clouds, ds_leaf_size=0.01):
         # Combine into new cloud
-        combined_arr = np.concatenate((cloud1.to_array(), cloud2.to_array()))
+        combined_arr = np.concatenate(([c.to_array() for c in clouds]))
         combined = pcl.PointCloud_PointXYZRGB()
         combined.from_array(combined_arr)
 
@@ -118,7 +123,7 @@ class ObjectPicker(object):
     def make_yaml_dict(self, test_scene_num, arm_name, object_name, pick_pose, place_pose):
         yaml_dict = {}
         yaml_dict["test_scene_num"] = test_scene_num.data
-        yaml_dict["arm_name"]  = arm_name.data
+        yaml_dict["arm_name"] = arm_name.data
         yaml_dict["object_name"] = object_name.data
         yaml_dict["pick_pose"] = message_converter.convert_ros_message_to_dictionary(pick_pose)
         yaml_dict["place_pose"] = message_converter.convert_ros_message_to_dictionary(place_pose)
@@ -147,8 +152,6 @@ class ObjectPicker(object):
 
         # PassThrough filter
         cloud_filtered = self.passthrough_cloud(cloud_filtered, "z", 0.6, 0.8)
-        if self.r_state >= self.R_STATES.pick_1:
-            cloud_filtered = self.passthrough_cloud(cloud_filtered, "y", -0.4, 0.4)
 
         # Outlier filter
         outlier_filter = cloud_filtered.make_statistical_outlier_filter()
@@ -175,7 +178,7 @@ class ObjectPicker(object):
         if self.angle_is_close(current_angle, target_angle):
             self.r_state = next_state
 
-    def accumulate_collisions(self, table_cloud):
+    def accumulate_collisions(self, table_cloud, object_cloud):
         # move dat boday
         if self.r_state == self.R_STATES.look_left:
             self.update_move_state(self.ANGLE_LEFT, self.R_STATES.look_right)
@@ -187,10 +190,15 @@ class ObjectPicker(object):
             self.update_move_state(0, self.R_STATES.pick_1)
 
         # accumulate and store collision
-        self.collision_cloud_table = self.combine_clouds(self.collision_cloud_table, table_cloud)
+        self.collision_cloud_table = self.combine_clouds((self.collision_cloud_table, 
+                                                            table_cloud, object_cloud))
 
+        self.objects_pub.publish(pcl_to_ros(object_cloud))
         self.table_pub.publish(pcl_to_ros(table_cloud))
         self.coll_pub.publish(pcl_to_ros(self.collision_cloud_table))
+
+        # if self.r_state == self.R_STATES.pick_1 and self.FRESH_SCAN:
+        #     pcl.save(self.collision_cloud_table, "collision_cloud.pcd", "pcd")
 
 
     # function to load parameters and request PickPlace service
@@ -321,10 +329,14 @@ class ObjectPicker(object):
 
         if self.r_state < self.R_STATES.pick_1:
             # build collision map
-            self.accumulate_collisions(table_cloud)
+            object_cloud = self.passthrough_cloud(object_cloud, "x", -0.4, 0.4) # boxes
+
+            self.accumulate_collisions(table_cloud, object_cloud)
 
         elif self.r_state < self.R_STATES.finish:
             # identify objects and pick them up
+            object_cloud = self.passthrough_cloud(object_cloud, "y", -0.4, 0.4) # objects
+
             self.pick_objects(object_cloud)
         # else:
             # do nothing, we're done
