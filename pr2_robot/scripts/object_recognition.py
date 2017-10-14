@@ -208,16 +208,21 @@ class ObjectPicker(object):
     def pr2_mover(self, object_centroids):
         # Loop through the pick list
         yaml_out = []
+        collected = []
         for obj in self.OBJECT_LIST_PARAM:
             # Fetch the centroid
             if obj["name"] in object_centroids:
-                print obj["name"]
+                collected.append(obj["name"])
                 centroid = self.centroid_of_cloud(object_centroids[obj["name"]])
 
                 # Other objects are now obstacles
-                coll_objs = self.combine_clouds((object_centroids[n] for n in object_centroids 
-                                                    if n != obj["name"]))
-                total_coll = self.combine_clouds((self.collision_cloud_table, coll_objs))
+                coll_clouds = [self.collision_cloud_table]
+                for n in object_centroids:
+                    if n not in collected:
+                        coll_clouds.append(object_centroids[n])
+
+                total_coll = self.combine_clouds(coll_clouds) if (len(coll_clouds) > 1) \
+                                 else coll_clouds[0]
                 self.coll_pub.publish(pcl_to_ros(total_coll))
             else:
                 # We're only interested in objects on the list
@@ -242,7 +247,6 @@ class ObjectPicker(object):
 
                 # Send as a service request
                 resp = pick_place_routine(test_scene_num, obj_name, arm_name, pick_pose, place_pose)
-
                 print ("Response: ", resp.success)
 
             except rospy.ServiceException, e:
@@ -309,8 +313,8 @@ class ObjectPicker(object):
             do.cloud = pcl_cluster_r
             detected_objects_list.append(do)
 
-            # Store centroid
-            object_centroids[label] = pcl_cluster # np.mean(pcl_cluster.to_array(), axis=0)[:3]
+            # Store in dict
+            object_centroids[label] = pcl_cluster
             
         # Publish the list of detected objects
         # rospy.loginfo('Detected {} objects: {}'.format(len(detected_object_labels), detected_object_labels))
