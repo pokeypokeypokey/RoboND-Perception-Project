@@ -67,7 +67,7 @@ class ObjectPicker(object):
         # Publishers
         self.objects_pub = rospy.Publisher("/pr2/pcl_objects", PointCloud2, queue_size=1)
         self.table_pub = rospy.Publisher("/pr2/pcl_table", PointCloud2, queue_size=1)
-        self.coll_pub  = rospy.Publisher("/pr2/3D_map/points", PointCloud2, queue_size=1)
+        self.coll_pub  = rospy.Publisher("/pr2/3d_map/points", PointCloud2, queue_size=1)
         self.cluster_pub = rospy.Publisher("/pr2/pcl_cluster", PointCloud2, queue_size=1)
         self.object_markers_pub = rospy.Publisher("/object_markers", Marker, queue_size=1)
         self.detected_objects_pub = rospy.Publisher("/detexted_objects", DetectedObjectsArray, queue_size=1)
