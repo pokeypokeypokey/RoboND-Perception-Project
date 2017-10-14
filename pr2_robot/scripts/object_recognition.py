@@ -17,9 +17,8 @@ import rospy
 import rospkg
 import tf
 from geometry_msgs.msg import Pose
-from std_msgs.msg import Float64
-from std_msgs.msg import Int32
-from std_msgs.msg import String
+from std_msgs.msg import Float64, Int32, String
+from std_srvs.srv import Empty
 from pr2_robot.srv import *
 from rospy_message_converter import message_converter
 import yaml
@@ -113,6 +112,14 @@ class ObjectPicker(object):
 
         # Downsample (to remove duplicates)
         return self.downsample_cloud(combined, ds_leaf_size)
+
+    def clear_collisions(self):
+        rospy.wait_for_service('/clear_octomap')
+        try:
+            clear = rospy.ServiceProxy('/clear_octomap', Empty)
+            resp  = clear()
+        except rospy.ServiceException, e:
+            print "Service call failed: %s"%e
 
     def centroid_of_cloud(self, cloud):
         return np.mean(cloud.to_array(), axis=0)[:3]
@@ -223,6 +230,9 @@ class ObjectPicker(object):
 
                 total_coll = self.combine_clouds(coll_clouds) if (len(coll_clouds) > 1) \
                                  else coll_clouds[0]
+
+                # Publish new collision cloud
+                self.clear_collisions()
                 self.coll_pub.publish(pcl_to_ros(total_coll))
             else:
                 # We're only interested in objects on the list
