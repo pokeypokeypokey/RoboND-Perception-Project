@@ -114,6 +114,9 @@ class ObjectPicker(object):
         # Downsample (to remove duplicates)
         return self.downsample_cloud(combined, ds_leaf_size)
 
+    def centroid_of_cloud(self, cloud):
+        return np.mean(cloud.to_array(), axis=0)[:3]
+
     # Helper function to get surface normals
     def get_normals(self, cloud):
         get_normals_prox = rospy.ServiceProxy('/feature_extractor/get_normals', GetNormals)
@@ -167,7 +170,7 @@ class ObjectPicker(object):
             _, rot = self.tf_listen.lookupTransform("/world", "/base_footprint", rospy.Time(0))
             # Get rotation about z from quaternion
             current_angle = atan2(2*(rot[0]*rot[1] + rot[2]*rot[3]), 
-                                  1 - 2*(rot[1]**2 + rot[2]**2))
+                                    1 - 2*(rot[1]**2 + rot[2]**2))
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
             return
 
@@ -208,7 +211,14 @@ class ObjectPicker(object):
         for obj in self.OBJECT_LIST_PARAM:
             # Fetch the centroid
             if obj["name"] in object_centroids:
-                centroid = object_centroids[obj["name"]]
+                print obj["name"]
+                centroid = self.centroid_of_cloud(object_centroids[obj["name"]])
+
+                # Other objects are now obstacles
+                coll_objs = self.combine_clouds((object_centroids[n] for n in object_centroids 
+                                                    if n != obj["name"]))
+                total_coll = self.combine_clouds((self.collision_cloud_table, coll_objs))
+                self.coll_pub.publish(pcl_to_ros(total_coll))
             else:
                 # We're only interested in objects on the list
                 continue
@@ -227,16 +237,16 @@ class ObjectPicker(object):
             # Wait for 'pick_place_routine' service to come up
             rospy.wait_for_service('pick_place_routine')
 
-            # try:
-            #     pick_place_routine = rospy.ServiceProxy('pick_place_routine', PickPlace)
+            try:
+                pick_place_routine = rospy.ServiceProxy('pick_place_routine', PickPlace)
 
-            #     # Send as a service request
-            #     resp = pick_place_routine(test_scene_num, obj_name, arm_name, pick_pose, place_pose)
+                # Send as a service request
+                resp = pick_place_routine(test_scene_num, obj_name, arm_name, pick_pose, place_pose)
 
-            #     print ("Response: ", resp.success)
+                print ("Response: ", resp.success)
 
-            # except rospy.ServiceException, e:
-            #     print "Service call failed: %s"%e
+            except rospy.ServiceException, e:
+                print "Service call failed: %s"%e
 
         # Output request parameters into yaml file
         # self.send_to_yaml(package_url + "/config/output_%i.yaml" % self.TEST_SCENE_NUM, yaml_out)
@@ -300,7 +310,7 @@ class ObjectPicker(object):
             detected_objects_list.append(do)
 
             # Store centroid
-            object_centroids[label] = np.mean(pcl_cluster.to_array(), axis=0)[:3]
+            object_centroids[label] = pcl_cluster # np.mean(pcl_cluster.to_array(), axis=0)[:3]
             
         # Publish the list of detected objects
         # rospy.loginfo('Detected {} objects: {}'.format(len(detected_object_labels), detected_object_labels))
