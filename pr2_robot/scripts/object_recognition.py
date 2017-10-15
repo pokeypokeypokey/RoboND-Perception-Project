@@ -37,8 +37,8 @@ class StateEnum(object):
 
 
 class ObjectPicker(object):
-    PLACE_POSES = {"red":   (0,  0.71, 0.605),
-                   "green": (0, -0.71, 0.605)}
+    PLACE_POSES = {"red":   (-0.1,  0.71, 0.605),
+                   "green": (-0.1, -0.71, 0.605)}
     ARM_TO_USE = {"red":   "left",
                   "green": "right"}
     ANGLE_LEFT  =  np.pi/2. # 0.707
