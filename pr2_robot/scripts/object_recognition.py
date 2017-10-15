@@ -37,12 +37,14 @@ class StateEnum(object):
 
 
 class ObjectPicker(object):
-    PLACE_POSES = {"red":   (-0.1,  0.71, 0.605),
-                   "green": (-0.1, -0.71, 0.605)}
+    PLACE_MIN_Y = 0.68
+    PLACE_MAX_Y = 0.8
+    PLACE_POSES = {"red":   [-0.11,  PLACE_MIN_Y, 0.605],
+                   "green": [-0.11, -PLACE_MIN_Y, 0.605]}
     ARM_TO_USE = {"red":   "left",
                   "green": "right"}
-    ANGLE_LEFT  =  np.pi/2. # 0.707
-    ANGLE_RIGHT = -np.pi/2. # -0.707
+    ANGLE_LEFT  =  np.pi/2.
+    ANGLE_RIGHT = -np.pi/2.
 
     FRESH_SCAN = False
 
@@ -150,6 +152,23 @@ class ObjectPicker(object):
         msg.position.x, msg.position.y, msg.position.z = position
         return msg
 
+    def drop_box_pose(self, box, shift=0.1):
+        # Create message
+        curr_pose = self.PLACE_POSES[box]
+        msg = self.make_pose_message(curr_pose)
+
+        # Update pose (to prevent clashes)
+        next_y = abs(curr_pose[1]) + shift
+        if next_y > self.PLACE_MAX_Y:
+            next_y -= (self.PLACE_MAX_Y - self.PLACE_MIN_Y)
+
+        if box == "red":
+            self.PLACE_POSES[box][1] = next_y
+        else:
+            self.PLACE_POSES[box][1] = -next_y
+
+        return msg
+
     def passthrough_cloud(self, cloud, axis, start, end):
         passthrough = cloud.make_passthrough_filter()
         passthrough.set_filter_field_name(axis)
@@ -242,7 +261,7 @@ class ObjectPicker(object):
             test_scene_num = Int32(self.TEST_SCENE_NUM)
             obj_name = String(obj["name"])
             arm_name = String(self.ARM_TO_USE[obj["group"]])
-            place_pose = self.make_pose_message(self.PLACE_POSES[obj["group"]])
+            place_pose = self.drop_box_pose(obj["group"])
             pick_pose  = self.make_pose_message(map(np.asscalar, centroid))
 
             # yaml output
