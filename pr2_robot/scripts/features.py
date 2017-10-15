@@ -27,6 +27,7 @@ def compute_color_histograms(cloud, using_hsv=False):
     c1c2c3_colors = np.empty((3, cloud.width*cloud.height))
 
     # Step through each point in the point cloud
+    i = 0
     for i, point in enumerate(pc2.read_points(cloud, skip_nans=True)):
         rgb = float_to_rgb(point[3])
         point_colors[:, i]  = (rgb_to_hsv(rgb) * 255) if using_hsv else rgb
@@ -43,6 +44,8 @@ def compute_color_histograms(cloud, using_hsv=False):
 def compute_normal_histograms(normal_cloud):
     norm_vals = np.empty((3, normal_cloud.width*normal_cloud.height))
 
+    # Step through each point in the point cloud
+    i = 0
     for i, norm_component in enumerate(pc2.read_points(normal_cloud,
                                           field_names = ('normal_x', 'normal_y', 'normal_z'),
                                           skip_nans=True)):
