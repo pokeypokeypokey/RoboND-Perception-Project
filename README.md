@@ -23,7 +23,7 @@
 
 ### Perception Pipeline
 
-Raw input cloud:
+##### Raw input cloud
 ![params][cloud_r]
 
 #### 1. Filtering and RANSAC plane fitting.
@@ -58,13 +58,13 @@ An SVM classifier with a linear kernel was trained using 100 clouds from each ob
 ![params][class_c]
 
 ##### World 1
-![params][cloud_1]
+![params][class_1]
 
 ##### World 2
-![params][cloud_2]
+![params][class_2]
 
 ##### World 3
-![params][cloud_3]
+![params][class_3]
 
 ### Pick and Place Setup
 #### 1. Robot states.
