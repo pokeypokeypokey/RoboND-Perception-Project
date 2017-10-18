@@ -16,6 +16,14 @@
 [class_2]: ./misc_images/classified_2.png
 [class_3]: ./misc_images/classified_3.png
 
+[coll_l]: ./misc_images/collision_look_right.png
+[coll_o]: ./misc_images/collision_objects.png
+
+[pickplace_r]: ./misc_images/pickplace_reach.png
+[pickplace_d]: ./misc_images/pickplace_drop.png
+[pickplace_s]: ./misc_images/pickplace_snug.png
+
+[fin]: ./misc_images/fin.png
 
 ## [Rubric](https://review.udacity.com/#!/rubrics/1067/view) Points
 
@@ -35,7 +43,7 @@ Finally a statistical outlier filter (50 neighbours, 0.001 std deviation multipl
 
 ![params][cloud_f]
 
-To identify the table top, and seperate it from the objects, a plane is fit to the cloud using RANSAC. The fitted plane is assumed to be the table top. 
+To identify the table top, and seperate it from the objects, a plane is fit to the cloud using RANSAC. Points within the fitted plane are assumed to come from the table top. Points not in the plane are assumed to come from objects.
 
 ![params][cloud_o]
 
@@ -75,7 +83,25 @@ Movement is achieved by publishing angles to `"/pr2/world_joint_controller/comma
 #### 2. Collision cloud.
 To aid motion planning, a point cloud describing all obstacles is published to `"/pr2/3d_map/points"`. While the robot is looking around, the table cloud is accumulated. 
 
+![params][coll_l]
+
 When an object is selected for pickup, all other objects are added to the collision cloud.
 
+![params][coll_o]
+
 #### 3. Pick/Place Request
-Objects are matched with pick/place requests. A service request is generated which includes the object name, the arm to use, the object's location and where to drop the object. The object's location is calculated as the centroid of the associated point cloud. The drop location is somewhere above the dropbox described by the pick/place request, with minor variations between objects to stop them falling right on top of each other.
+Objects are matched with pick/place requests. A service request is generated which includes the object name, the arm to use, the object's location and where to drop the object. 
+
+The object's location is calculated as the centroid of the associated point cloud. 
+
+![params][pickplace_r]
+
+The drop location is somewhere above the dropbox described by the pick/place request, with minor variations between objects to stop them falling right on top of each other.
+
+![params][pickplace_d]
+
+![params][pickplace_s]
+
+Once all objects in the requests are accounted for, we raise the roof.
+
+![params][fin]
