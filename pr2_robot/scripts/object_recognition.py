@@ -43,7 +43,7 @@ class ObjectPicker(object):
     ANGLE_LEFT  =  np.pi/2.
     ANGLE_RIGHT = -np.pi/2.
 
-    FRESH_SCAN = True
+    FRESH_SCAN = False
 
 
     def __init__(self):
@@ -70,6 +70,8 @@ class ObjectPicker(object):
         self.object_markers_pub = rospy.Publisher("/object_markers", Marker, queue_size=1)
         self.detected_objects_pub = rospy.Publisher("/detexted_objects", DetectedObjectsArray, queue_size=1)
         self.pub_base_joint = rospy.Publisher("/pr2/world_joint_controller/command", Float64, queue_size=10)
+
+        self.write_pub = rospy.Publisher("/writeup", PointCloud2, queue_size=1)
 
         # Collision clouds
         if self.FRESH_SCAN:
@@ -379,7 +381,7 @@ class ObjectPicker(object):
 
             self.pick_objects(object_cloud)
         # else:
-            # do nothing, we're done
+        #     do nothing, we're done
 
 
 if __name__ == '__main__':
