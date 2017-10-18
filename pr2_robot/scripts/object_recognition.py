@@ -26,14 +26,11 @@ from math import atan2
 
 
 class StateEnum(object):
-    def __init__(self, pick_n):
+    def __init__(self):
         self.look_left  = 0
         self.look_right = 1
         self.look_straight = 2
-        self.finish = pick_n+3
-
-        for i in xrange(pick_n):
-            setattr(self, "pick_%i" % (i+1), (i+3))
+        self.pick_place = 3
 
 
 class ObjectPicker(object):
@@ -46,7 +43,7 @@ class ObjectPicker(object):
     ANGLE_LEFT  =  np.pi/2.
     ANGLE_RIGHT = -np.pi/2.
 
-    FRESH_SCAN = False
+    FRESH_SCAN = True
 
 
     def __init__(self):
@@ -59,7 +56,7 @@ class ObjectPicker(object):
         self.TEST_SCENE_NUM = {3: 1, 5: 2, 8: 3}[param_n]
 
         # Robot states
-        self.R_STATES = StateEnum(param_n)
+        self.R_STATES = StateEnum()
 
         # Subscriber
         self.pcl_sub = rospy.Subscriber("/pr2/world/points", pc2.PointCloud2, self.pcl_callback, queue_size=1)
@@ -216,7 +213,7 @@ class ObjectPicker(object):
             self.update_move_state(self.ANGLE_RIGHT, self.R_STATES.look_straight)
 
         else:
-            self.update_move_state(0, self.R_STATES.pick_1)
+            self.update_move_state(0, self.R_STATES.pick_place)
 
         # accumulate and store collision
         self.collision_cloud_table = self.combine_clouds((self.collision_cloud_table, 
@@ -370,13 +367,13 @@ class ObjectPicker(object):
         object_cloud = cloud_filtered.extract(inliers, negative=True)
         table_cloud  = cloud_filtered.extract(inliers, negative=False)
 
-        if self.r_state < self.R_STATES.pick_1:
+        if self.r_state != self.R_STATES.pick_place:
             # build collision map
             object_cloud = self.passthrough_cloud(object_cloud, "x", -0.4, 0.4) # boxes
 
             self.accumulate_collisions(table_cloud, object_cloud)
 
-        elif self.r_state < self.R_STATES.finish:
+        else:
             # identify objects and pick them up
             object_cloud = self.passthrough_cloud(object_cloud, "y", -0.4, 0.4) # objects
 
