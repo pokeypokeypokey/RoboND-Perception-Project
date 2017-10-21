@@ -34,7 +34,7 @@
 ##### Raw input cloud
 ![params][cloud_r]
 
-All point cloud processing happens in All feature calculations happen in `pr2_robot/scripts/object_recognition.py`.
+All point cloud processing happens in `pr2_robot/scripts/object_recognition.py`.
 
 #### 1. Filtering and RANSAC plane fitting.
 First the depth is downsampled (leaf size of 0.005), to reduce the processing load. Next two simple passthrough filters (0.6 < z < 0.8 and -0.4 < y < 0.4) are applied, to restrict the attention to just the table top and the objects on it. 
