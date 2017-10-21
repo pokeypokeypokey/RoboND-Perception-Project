@@ -74,8 +74,6 @@ class ObjectPicker(object):
         self.detected_objects_pub = rospy.Publisher("/detexted_objects", DetectedObjectsArray, queue_size=1)
         self.pub_base_joint = rospy.Publisher("/pr2/world_joint_controller/command", Float64, queue_size=10)
 
-        self.write_pub = rospy.Publisher("/writeup", PointCloud2, queue_size=1)
-
         # Collision clouds
         if self.FRESH_SCAN:
             self.r_state = self.R_STATES.look_left # Start looking left
