@@ -26,24 +26,27 @@ from math import atan2
 
 
 class StateEnum(object):
+    """
+    Robot states
+    """
     def __init__(self):
-        self.look_left  = 0
-        self.look_right = 1
-        self.look_straight = 2
-        self.pick_place = 3
+        self.look_left      = 0
+        self.look_right     = 1
+        self.look_straight  = 2
+        self.pick_place     = 3
 
 
 class ObjectPicker(object):
-    PLACE_MIN_Y = 0.68
-    PLACE_MAX_Y = 0.8
+    PLACE_MIN_Y = 0.68 # Min drop box Y value
+    PLACE_MAX_Y = 0.8  # Max drop box Y value
     PLACE_POSES = {"red":   [-0.11,  PLACE_MIN_Y, 0.605],
                    "green": [-0.11, -PLACE_MIN_Y, 0.605]}
     ARM_TO_USE = {"red":   "left",
                   "green": "right"}
-    ANGLE_LEFT  =  np.pi/2.
+    ANGLE_LEFT  =  np.pi/2. # Angle to turn left
     ANGLE_RIGHT = -np.pi/2.
 
-    FRESH_SCAN = False
+    FRESH_SCAN = False # Do a fresh scan of the collision map (otherwise load from file)
 
 
     def __init__(self):
@@ -98,14 +101,23 @@ class ObjectPicker(object):
             rospy.spin()
 
     def angle_is_close(self, a1, a2, eps=0.01):
+        """
+        Check if two angles are within a given tolerance of each other.
+        """
         return (abs(a1-a2) < eps)
 
     def downsample_cloud(self, cloud, leaf_size):
+        """
+        Downsample the given cloud to the given voxel size.
+        """
         vox = cloud.make_voxel_grid_filter()
         vox.set_leaf_size(leaf_size, leaf_size, leaf_size)
         return vox.filter()
 
     def combine_clouds(self, clouds, ds_leaf_size=0.01):
+        """
+        Combine a list of point clouds into one cloud.
+        """
         # Combine into new cloud
         combined_arr = np.concatenate(([c.to_array() for c in clouds]))
         combined = pcl.PointCloud_PointXYZRGB()
@@ -115,6 +127,9 @@ class ObjectPicker(object):
         return self.downsample_cloud(combined, ds_leaf_size)
 
     def clear_collisions(self):
+        """
+        Reset the collision cloud.
+        """
         rospy.wait_for_service('/clear_octomap')
         try:
             clear = rospy.ServiceProxy('/clear_octomap', Empty)
@@ -123,15 +138,22 @@ class ObjectPicker(object):
             print "Service call failed: %s"%e
 
     def centroid_of_cloud(self, cloud):
+        """
+        Get the centroid of the given cloud.
+        """
         return np.mean(cloud.to_array(), axis=0)[:3]
 
-    # Helper function to get surface normals
     def get_normals(self, cloud):
+        """
+        Get surface normals of the given cloud,
+        """
         get_normals_prox = rospy.ServiceProxy('/feature_extractor/get_normals', GetNormals)
         return get_normals_prox(cloud).cluster
 
-    # Helper function to create a yaml friendly dictionary from ROS messages
     def make_yaml_dict(self, test_scene_num, arm_name, object_name, pick_pose, place_pose):
+        """
+        Create a yaml friendly dictionary from ROS messages.
+        """
         yaml_dict = {}
         yaml_dict["test_scene_num"] = test_scene_num.data
         yaml_dict["arm_name"] = arm_name.data
@@ -140,18 +162,27 @@ class ObjectPicker(object):
         yaml_dict["place_pose"] = message_converter.convert_ros_message_to_dictionary(place_pose)
         return yaml_dict
 
-    # Helper function to output to yaml file
     def send_to_yaml(self, yaml_filename, dict_list):
+        """
+        Output pick/place request to yaml.
+        """
         data_dict = {"object_list": dict_list}
         with open(yaml_filename, 'w') as outfile:
             yaml.dump(data_dict, outfile, default_flow_style=False)
 
     def make_pose_message(self, position):
+        """
+        Create pose message from given position.
+        """
         msg = Pose()
         msg.position.x, msg.position.y, msg.position.z = position
         return msg
 
     def drop_box_pose(self, box, shift=0.1):
+        """
+        Create a new drop box pose, with slight variations to
+        prevent objects falling straight on top of one another.
+        """
         # Create message
         curr_pose = self.PLACE_POSES[box]
         msg = self.make_pose_message(curr_pose)
@@ -169,12 +200,19 @@ class ObjectPicker(object):
         return msg
 
     def passthrough_cloud(self, cloud, axis, start, end):
+        """
+        Apply passthrough filter to the given cloud.
+        """
         passthrough = cloud.make_passthrough_filter()
         passthrough.set_filter_field_name(axis)
         passthrough.set_filter_limits(start, end)
         return passthrough.filter()
 
     def filter_cloud(self, cloud):
+        """
+        Apply downsampling, passthrough filters and remove statistical outliers
+        from given cloud.
+        """
         # Voxel Grid filter
         cloud_filtered = self.downsample_cloud(cloud, 0.005)
 
@@ -190,6 +228,10 @@ class ObjectPicker(object):
         return cloud_filtered
 
     def update_move_state(self, target_angle, next_state):
+        """
+        Send next move command, monitor current robot view angle and 
+        update robot state if appropriate.
+        """
         # get current rotation
         try:
             _, rot = self.tf_listen.lookupTransform("/world", "/base_footprint", rospy.Time(0))
@@ -207,6 +249,10 @@ class ObjectPicker(object):
             self.r_state = next_state
 
     def accumulate_collisions(self, table_cloud, object_cloud):
+        """
+        Look left, right and finally straight to get and store the entire table
+        collision cloud.
+        """
         # move dat boday
         if self.r_state == self.R_STATES.look_left:
             self.update_move_state(self.ANGLE_LEFT, self.R_STATES.look_right)
@@ -228,23 +274,24 @@ class ObjectPicker(object):
         # if self.r_state == self.R_STATES.pick_1 and self.FRESH_SCAN:
         #     pcl.save(self.collision_cloud_table, "collision_cloud.pcd", "pcd")
 
-
-    # function to load parameters and request PickPlace service
-    def pr2_mover(self, object_centroids):
+    def pr2_mover(self, object_clouds):
+        """
+        Load parameters and request PickPlace service
+        """
         # Loop through the pick list
         yaml_out = []
         collected = []
         for obj in self.OBJECT_LIST_PARAM:
             # Fetch the centroid
-            if obj["name"] in object_centroids:
+            if obj["name"] in object_clouds:
                 collected.append(obj["name"])
-                centroid = self.centroid_of_cloud(object_centroids[obj["name"]])
+                centroid = self.centroid_of_cloud(object_clouds[obj["name"]])
 
                 # Other objects are now obstacles
                 coll_clouds = [self.collision_cloud_table]
-                for n in object_centroids:
+                for n in object_clouds:
                     if n not in collected:
-                        coll_clouds.append(object_centroids[n])
+                        coll_clouds.append(object_clouds[n])
 
                 total_coll = self.combine_clouds(coll_clouds) if (len(coll_clouds) > 1) \
                                  else coll_clouds[0]
@@ -281,9 +328,13 @@ class ObjectPicker(object):
                 print "Service call failed: %s"%e
 
         # Output request parameters into yaml file
-        # self.send_to_yaml(package_url + "/config/output_%i.yaml" % self.TEST_SCENE_NUM, yaml_out)
+        self.send_to_yaml(package_url + "/config/output_%i.yaml" % self.TEST_SCENE_NUM, yaml_out)
 
     def pick_objects(self, object_cloud):
+        """
+        Cluster and classify objects, and pass the clusters on to the
+        pick/place generation routine.
+        """
         # Clustering
         white_cloud = XYZRGB_to_XYZ(object_cloud)
         tree = white_cloud.make_kdtree()
@@ -314,7 +365,7 @@ class ObjectPicker(object):
         # Classify the clusters (loop through each detected cluster one at a time)
         detected_object_labels = []
         detected_objects_list = []
-        object_centroids = {}
+        object_clouds = {}
 
         for idx, pts_list in enumerate(cluster_indices):
             # Grab the points for the cluster
@@ -342,19 +393,21 @@ class ObjectPicker(object):
             detected_objects_list.append(do)
 
             # Store in dict
-            object_centroids[label] = pcl_cluster
+            object_clouds[label] = pcl_cluster
             
         # Publish the list of detected objects
         # rospy.loginfo('Detected {} objects: {}'.format(len(detected_object_labels), detected_object_labels))
         self.detected_objects_pub.publish(detected_objects_list)
 
         try:
-            self.pr2_mover(object_centroids)
+            self.pr2_mover(object_clouds)
         except rospy.ROSInterruptException:
             pass
 
-    # Callback function for your Point Cloud Subscriber
     def pcl_callback(self, pcl_msg):
+        """
+        Callback function for Point Cloud Subscriber.
+        """
         cloud = ros_to_pcl(pcl_msg)
         cloud_filtered = self.filter_cloud(cloud)
 
