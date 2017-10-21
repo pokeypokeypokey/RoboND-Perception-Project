@@ -34,6 +34,8 @@
 ##### Raw input cloud
 ![params][cloud_r]
 
+All point cloud processing happens in `pr2_robot/scripts/object_recognition.py`.
+
 #### 1. Filtering and RANSAC plane fitting.
 First the depth is downsampled (leaf size of 0.005), to reduce the processing load. Next two simple passthrough filters (0.6 < z < 0.8 and -0.4 < y < 0.4) are applied, to restrict the attention to just the table top and the objects on it. 
 
@@ -60,6 +62,8 @@ The features used fall into 4 groups:
 * Cluster sizes (x, y and z lengths)
 
 The c1c2c3 colour space is described [here](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.43.6496&rep=rep1&type=pdf) and reviewed [here](https://arxiv.org/abs/1702.05421).
+
+All feature calculations happen in `pr2_robot/scripts/features.py`.
 
 An SVM classifier with a linear kernel was trained using 100 clouds from each object (at random orientations for each cloud), achieving an average cross-validation accuracy of 0.93 across 5 folds.
 
@@ -92,7 +96,9 @@ When an object is selected for pickup, all other objects are added to the collis
 #### 3. Pick/Place Request
 Objects are matched with pick/place requests. A service request is generated which includes the object name, the arm to use, the object's location and where to drop the object. 
 
-The object's location is calculated as the centroid of the associated point cloud. 
+The object's location is calculated as the centroid of the associated point cloud.
+
+All calculations happen in `pr2_robot/scripts/object_recognition.py`.
 
 ![params][pickplace_r]
 
@@ -105,3 +111,8 @@ The drop location is somewhere above the dropbox described by the pick/place req
 Once all objects in the requests are accounted for, we raise the roof.
 
 ![params][fin]
+
+### Final Thoughts
+The robot grasping isn't super reliable. I tweaked the PID values for the gripper to get it to pick up all the objects in the first world, but more is required for worlds 2 and 3.
+
+I also would've liked to try the challenge world, but have too much time pressure at the moment. 
